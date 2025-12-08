@@ -1,54 +1,49 @@
-# Dockerfile
 FROM php:8.2-apache
 
-# Mettre à jour et installer les dépendances
+# Installer les extensions PHP
 RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip \
-    libzip-dev \
-    libpq-dev \
-    && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip
+    libpng-dev libonig-dev libxml2-dev \
+    libzip-dev libpq-dev unzip git \
+    && docker-php-ext-install pdo pdo_mysql mbstring gd zip
 
-# Activer les modules Apache nécessaires
-RUN a2enmod rewrite headers
+# Activer Apache rewrite
+RUN a2enmod rewrite
 
 # Installer Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Définir le répertoire de travail
 WORKDIR /var/www/html
 
-# Copier les fichiers de configuration
+# Copier les fichiers
 COPY . .
 
-# Installer les dépendances Composer (PRODUCTION)
-RUN composer install --no-dev --optimize-autoloader --no-scripts
+# Installer les dépendances
+RUN composer install --no-dev --optimize-autoloader
 
-# Configurer les permissions pour Laravel
+# Configurer les permissions
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html/storage \
-    && chmod -R 755 /var/www/html/bootstrap/cache
+    && chmod -R 755 storage bootstrap/cache
 
-# Créer le fichier de configuration Apache
-RUN echo '<VirtualHost *:80>\n\
-    DocumentRoot /var/www/html/public\n\
-    <Directory /var/www/html/public>\n\
-        AllowOverride All\n\
-        Require all granted\n\
-    </Directory>\n\
-    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
-    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
-</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
+# CRITIQUE : Configurer Apache pour Railway
+# 1. Créer un script de démarrage
+RUN echo '#!/bin/bash\n\
+\n\
+# Récupérer le port de Railway\n\
+if [ -z "$PORT" ]; then\n\
+  PORT=8080\n\
+fi\n\
+\n\
+# Configurer Apache pour ce port\n\
+sed -i "s/Listen 80/Listen $PORT/g" /etc/apache2/ports.conf\n\
+sed -i "s/:80/:$PORT/g" /etc/apache2/sites-available/000-default.conf\n\
+\n\
+# Démarrer Apache\n\
+exec apache2-foreground' > /start.sh
 
+RUN chmod +x /start.sh
 
-
-# Utiliser le port dynamique de Railway
+# Exposer le port (Railway définit $PORT)
 EXPOSE $PORT
-CMD sed -i "s/Listen 80/Listen $PORT/g" /etc/apache2/ports.conf && \
-    sed -i "s/:80/:$PORT/g" /etc/apache2/sites-available/*.conf && \
-    apache2-foreground
+
+# Utiliser le script de démarrage
+CMD ["/start.sh"]
