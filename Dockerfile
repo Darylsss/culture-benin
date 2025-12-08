@@ -2,7 +2,7 @@ FROM php:8.2-cli
 
 WORKDIR /var/www/html
 
-# Copier d'abord composer.json pour le cache
+# Copier d'abord composer.json pour optimiser le cache
 COPY composer.json composer.lock ./
 
 # Installer les dépendances système
@@ -14,17 +14,14 @@ RUN apt-get update && apt-get install -y \
 # Installer Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Installer les dépendances PHP
+# Installer les dépendances PHP (SANS post-install-cmd)
 RUN composer install --no-dev --optimize-autoloader --no-scripts
 
-# Copier tout le reste
+# Copier tout le reste du code
 COPY . .
 
-# Exécuter les scripts post-installation
-RUN composer run-script post-install-cmd
-
-# Configurer les permissions
-RUN chmod -R 755 storage bootstrap/cache
+# Configurer les permissions Laravel
+RUN chmod -R 775 storage bootstrap/cache
 
 # Exposer le port (Railway définit $PORT automatiquement)
 EXPOSE $PORT
